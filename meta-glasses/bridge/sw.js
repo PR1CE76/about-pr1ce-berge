@@ -1,5 +1,5 @@
 /* Minimal offline shell so the launcher opens without a signal. ChatGPT itself still needs a connection. */
-var CACHE = 'glasses-ask-v1';
+var CACHE = 'glasses-ask-bridge-v2';
 var FILES = ['./', './index.html', './manifest.json', './icon.svg'];
 self.addEventListener('install', function (e) {
   e.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(FILES); }).then(function () { return self.skipWaiting(); }));

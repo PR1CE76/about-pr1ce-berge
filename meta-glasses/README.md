@@ -1,43 +1,74 @@
 # Glasses Ask
 
-A small phone-first web app for asking questions to the **free** version of chatgpt.com, hands-free, with Ray-Ban Meta glasses as the microphone and speaker.
+Ask a question from **Meta Ray-Ban Display** glasses and read the answer from the **free version of chatgpt.com** on the in-lens display.
 
-The free ChatGPT has no API, so the app does not call OpenAI directly. It uses the public URL form that chatgpt.com accepts to pre-fill a question:
+The free ChatGPT has no API. The glasses cannot open chatgpt.com themselves. So this is a small three-part system with no server, no account and no API key:
 
 ```
-https://chatgpt.com/?q=<url-encoded question>&hints=search&temporary-chat=true
+Ray-Ban Display              ntfy.sh (free relay)              Phone or Mac
+glasses/index.html  ──ask──▶  <code>-ask topic  ──▶  bridge/index.html opens chatgpt.com/?q=…
+600x600 web app     ◀──ans──  <code>-ans topic  ◀──  you paste the reply (or the userscript relays it)
 ```
 
-`hints` (`search`, `research`) and `temporary-chat` are optional. OpenAI documents none of these parameters officially, so they can change. The app itself keeps working because the link always opens chatgpt.com with the question text.
+| Part | File | Runs on |
+| --- | --- | --- |
+| Glasses app | `glasses/index.html` | Ray-Ban Display, registered as a web app in the Meta AI app |
+| Bridge | `bridge/index.html` | Your phone or computer browser |
+| Auto bridge (optional) | `bridge/chatgpt-bridge.user.js` | Tampermonkey in the browser where chatgpt.com is open |
 
-## What it does
+## How a question travels
 
-- Dictate a question with the phone's speech recognition (Chrome on Android, Safari on iPhone), or type it.
-- Pick Chat, Web search, or Deep research mode and optionally a temporary chat.
-- Tap **Open in ChatGPT**. A new tab opens on chatgpt.com with the question already in the box. No account needed.
-- Keeps the last 25 questions on the device (localStorage only, nothing leaves the phone until you tap Open).
-- Dark mode by default with carbon fiber texture, light mode toggle.
-- Installable as a home screen app. On Android, the installed app also appears in the share sheet, so selected text from any app can be shared straight into the question box.
-- Deep link: `index.html?q=your+question` pre-fills the box. Useful from an iPhone Shortcut.
+1. On the glasses, pick a quick question, write one with the Neural Band, or speak it if the glasses runtime exposes the microphone to web apps.
+2. The glasses app posts the question to a relay topic named after your pair code.
+3. The bridge page on your phone shows the question with an **Open in ChatGPT** button. That link uses the public prefill form `https://chatgpt.com/?q=…` so the free site opens with the question typed in.
+4. Copy ChatGPT's reply, paste it under the question, tap **Send to glasses**.
+5. The glasses app shows the answer, paged to fit the 600 pixel lens, with ▼ to turn pages. It can also read it aloud if speech synthesis is available on the device.
 
-## Using it with Ray-Ban Meta glasses
+With the optional userscript, step 3 and 4 happen on their own in an open chatgpt.com tab. That automates the ChatGPT web page in your own browser. It depends on page markup OpenAI can change, and it may conflict with OpenAI's Terms of Use, so it is off by default and the manual flow needs nothing extra.
 
-1. Pair the glasses with the phone in the Meta AI app. The glasses play the phone's audio and can act as a Bluetooth microphone.
-2. Open the app on the phone and add it to the home screen.
-3. Tap **Speak**, ask the question, tap **Open in ChatGPT**.
-4. In ChatGPT, tap the voice or headphone icon to hear the reply through the glasses.
+## Setting up
 
-The glasses cannot run third-party apps and their wake word stays with Meta AI, so the phone remains in the loop.
+### Host the folder over HTTPS
 
-## Files
+Any static host works. For GitHub Pages: repository Settings, Pages, deploy from branch `main`, folder `/ (root)`. The apps are then at:
 
-| File | Purpose |
-| --- | --- |
-| `index.html` | The whole app, no build step |
-| `manifest.json` | Installable app plus Android share target |
-| `sw.js` | Caches the app shell for offline launch |
-| `icon.svg` | Home screen icon |
+```
+https://<github-user>.github.io/about-pr1ce-berge/meta-glasses/glasses/
+https://<github-user>.github.io/about-pr1ce-berge/meta-glasses/bridge/
+```
 
-## Hosting
+### Put the app on the glasses
 
-Any static host works. For GitHub Pages, publish this folder and open `https://<user>.github.io/<repo>/meta-glasses/`. Speech recognition and the service worker require HTTPS.
+1. In the Meta AI app, turn on Developer Mode, following Meta's Ray-Ban Display developer preview instructions.
+2. Go to Settings, Web apps, and add the `glasses/` URL (paste or scan a QR code).
+3. Open Glasses Ask from the glasses. Choose **Pair with phone** and note the code.
+
+### Pair the bridge
+
+Open the `bridge/` URL on your phone, enter the code, tap **Pair**. Add the bridge to your home screen so it launches like an app. On Android it also appears in the share sheet.
+
+## Navigating on the glasses
+
+The Neural Band and the temple touchpad reach a web app as ordinary keyboard events, so the app uses a simple focus list:
+
+| Gesture | Key the app sees | Does |
+| --- | --- | --- |
+| Thumb swipe up or down | Arrow up / down | Move between items, or turn pages in an answer |
+| Index pinch | Enter | Select, or send the typed question |
+| Middle-finger pinch | Escape | Back |
+| Handwriting with the band | Text input | Writes in the question field |
+
+The same keys work in a desktop browser at 600x600 for testing. A `?q=your+question` link sends a question immediately on load.
+
+## Design notes for the lens
+
+Black renders as transparent on the additive display, so the page is pure black with near-white text at 18 to 22 px, one idea per screen, nothing that scrolls, and the brand yellow (#ffc300) only on the focused item and the status line. The bridge follows the dealership app standards: dark mode by default with the carbon fiber texture, light toggle, #000814 / #001d3d / #ffc300 / #ff5733 / #e5e5e5.
+
+## Privacy
+
+Messages travel through ntfy.sh under topics named by your pair code. Topics are public to anyone who guesses the name, and messages are cached for about 12 hours. Use the long generated code, change it with **New code** whenever you like, and keep customer personal data out of questions. For a private deployment, run your own ntfy server and change the `RELAY` constant in all three files.
+
+## What was verified and what was not
+
+- Verified in a headless browser: the glasses app's keyboard navigation, paging, pairing and the full ask / answer round trip against a simulated relay. The bridge page's inbox, send and theme toggle.
+- Not verified from this environment: live calls to ntfy.sh (outbound network was blocked), the Meta AI app's web app registration flow, whether the glasses runtime exposes the microphone and speech synthesis to web apps, and the current chatgpt.com markup the userscript relies on.

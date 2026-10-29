@@ -1,7 +1,7 @@
 {
-  "name": "Glasses Ask",
-  "short_name": "Glasses Ask",
-  "description": "Dictate or type a question, then open the free chatgpt.com with it pre-filled.",
+  "name": "Glasses Ask Bridge",
+  "short_name": "Bridge",
+  "description": "Phone side of Glasses Ask: receives questions from Meta Ray-Ban Display glasses, opens free chatgpt.com, sends the answer back.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
