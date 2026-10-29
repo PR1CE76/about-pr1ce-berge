@@ -1,0 +1,18 @@
+{
+  "name": "Glasses Ask",
+  "short_name": "Glasses Ask",
+  "description": "Dictate or type a question, then open the free chatgpt.com with it pre-filled.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#000814",
+  "theme_color": "#000814",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ],
+  "share_target": {
+    "action": "./index.html",
+    "method": "GET",
+    "params": { "title": "title", "text": "text", "url": "url" }
+  }
+}
