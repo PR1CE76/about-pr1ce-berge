@@ -1,0 +1,320 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=600, initial-scale=1">
+<title>Glasses Ask</title>
+<meta name="description" content="Ask a question from Meta Ray-Ban Display glasses and read the free ChatGPT answer on the in-lens display.">
+<style>
+/* Layout: 600x600 monocular HUD. One idea per screen. Black is transparent on the additive display, so the
+   page is pure black, text is near-white, and the brand yellow marks only the focused item and the status line. */
+:root{
+  --bg:#000000; --fg:rgba(255,255,255,.95); --muted:rgba(255,255,255,.58); --surface:rgba(255,255,255,.07);
+  --accent:#ffc300; --hot:#ff5733; --ok:#5ad27a;
+  --font:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif,"Apple Color Emoji","Segoe UI Emoji","Segoe UI Symbol";
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0;width:600px;height:600px;overflow:hidden;background:var(--bg);color:var(--fg);font-family:var(--font);font-size:18px;line-height:1.35}
+body{display:flex;flex-direction:column;padding:22px 26px}
+header{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:10px}
+header h1{margin:0;font-size:15px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);font-weight:700}
+#status{font-size:14px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:330px}
+#status.live{color:var(--accent)}
+#status.err{color:var(--hot)}
+main{flex:1;min-height:0;display:flex;flex-direction:column;gap:10px}
+.view{display:none;flex:1;min-height:0;flex-direction:column;gap:10px}
+.view.on{display:flex}
+.list{display:flex;flex-direction:column;gap:8px;overflow:hidden}
+.item{appearance:none;font:inherit;font-size:19px;text-align:left;width:100%;min-height:50px;padding:11px 16px;border-radius:12px;
+  background:var(--surface);color:var(--fg);border:2px solid transparent;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:10px}
+.item.small{font-size:16px;min-height:44px;padding:9px 14px}
+.item .k{font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;white-space:nowrap}
+.item .txt{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.item.focus,.item:focus{border-color:var(--accent);outline:none;background:rgba(255,195,0,.12)}
+.item.primary{background:rgba(255,195,0,.18);font-weight:700}
+input.item{cursor:text}
+input.item::placeholder{color:var(--muted)}
+.reader{flex:1;min-height:0;overflow:hidden;position:relative;border-radius:12px;background:var(--surface);padding:14px 18px}
+.reader .q{font-size:15px;color:var(--muted);margin:0 0 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.reader .aw{overflow:hidden}
+.reader .a{font-size:19px;white-space:pre-wrap;word-wrap:break-word;margin:0;transition:transform .12s ease}
+.reader.focus{outline:2px solid var(--accent);outline-offset:-2px}
+.reader .fade{position:absolute;left:0;right:0;bottom:0;height:34px;background:linear-gradient(transparent,rgba(0,0,0,.9));pointer-events:none}
+.pager{font-size:13px;color:var(--muted);text-align:right;font-variant-numeric:tabular-nums}
+.big{font-size:22px;margin:0;line-height:1.3;text-wrap:balance}
+.muted{color:var(--muted);font-size:15px;margin:0}
+.code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:28px;letter-spacing:.08em;color:var(--accent);margin:0;word-break:break-all}
+footer{display:flex;justify-content:space-between;gap:10px;font-size:13px;color:var(--muted);margin-top:8px;white-space:nowrap}
+footer span b{color:var(--fg);font-weight:600}
+.pulse{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--ok);margin-right:6px;vertical-align:middle}
+.pulse.off{background:var(--hot)}
+.pulse.wait{background:var(--accent);animation:blink 1s infinite}
+@keyframes blink{50%{opacity:.25}}
+@media (prefers-reduced-motion:reduce){.pulse.wait{animation:none}.reader .a{transition:none}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Glasses Ask</h1>
+  <div id="status" aria-live="polite">Starting…</div>
+</header>
+<main>
+
+  <!-- HOME -->
+  <section class="view on" id="v-home" data-title="Home">
+    <p class="big" id="homeLine">Ask ChatGPT, hands-free.</p>
+    <p class="muted" id="homeSub">Pick a question, or write one with the Neural Band.</p>
+    <div class="list" id="homeList">
+      <button class="item primary" data-go="ask"><span class="txt">Ask a question</span><span class="k">select</span></button>
+      <button class="item" data-go="read" id="homeRead" hidden><span class="txt">Read the last answer</span><span class="k">select</span></button>
+      <button class="item" data-go="history" id="homeHist" hidden><span class="txt">Recent answers</span><span class="k">select</span></button>
+      <button class="item small" data-go="pair"><span class="txt">Pair with phone</span><span class="k" id="pairState">not paired</span></button>
+    </div>
+  </section>
+
+  <!-- ASK -->
+  <section class="view" id="v-ask" data-title="Ask">
+    <input class="item" id="qInput" type="text" placeholder="Write a question…" autocomplete="off" aria-label="Write a question">
+    <div class="list" id="askList"></div>
+  </section>
+
+  <!-- WAITING -->
+  <section class="view" id="v-wait" data-title="Sent">
+    <p class="big">Sent to your phone.</p>
+    <p class="muted" id="waitQ"></p>
+    <p class="muted"><span class="pulse wait"></span>Waiting for ChatGPT's answer. It appears here as soon as the bridge sends it.</p>
+    <div class="list">
+      <button class="item small" data-go="home"><span class="txt">Back</span><span class="k">back</span></button>
+    </div>
+  </section>
+
+  <!-- READ -->
+  <section class="view" id="v-read" data-title="Answer">
+    <div class="reader" id="reader" tabindex="-1">
+      <p class="q" id="readQ"></p>
+      <div class="aw" id="readAW"><p class="a" id="readA"></p></div>
+      <div class="fade"></div>
+    </div>
+    <div class="pager" id="pager"></div>
+    <div class="list">
+      <button class="item small" id="readSpeak" hidden><span class="txt">Read aloud</span><span class="k">select</span></button>
+      <button class="item small" data-go="ask"><span class="txt">Ask another</span><span class="k">select</span></button>
+    </div>
+  </section>
+
+  <!-- HISTORY -->
+  <section class="view" id="v-history" data-title="Recent">
+    <div class="list" id="histList"></div>
+  </section>
+
+  <!-- PAIR -->
+  <section class="view" id="v-pair" data-title="Pair">
+    <p class="muted">Enter this code on the bridge page on your phone or computer:</p>
+    <p class="code" id="codeOut"></p>
+    <p class="muted" id="pairHint"></p>
+    <div class="list">
+      <input class="item" id="codeInput" type="text" placeholder="Or type a code from the phone…" autocomplete="off" aria-label="Pair code">
+      <button class="item small" id="codeNew"><span class="txt">New code</span><span class="k">select</span></button>
+      <button class="item small" data-go="home"><span class="txt">Done</span><span class="k">back</span></button>
+    </div>
+  </section>
+
+</main>
+<footer>
+  <span><span class="pulse off" id="dot"></span><b id="viewName">Home</b></span>
+  <span>▲▼ move · pinch select · middle-pinch back</span>
+</footer>
+
+<script>
+(function(){
+  'use strict';
+  var $=function(id){return document.getElementById(id);};
+  var RELAY='https://ntfy.sh/';   /* free public pub/sub, no account. Change to a self-hosted ntfy if you prefer. */
+  var K={code:'ga.code',hist:'ga.hist',last:'ga.lastId',pending:'ga.pending'};
+  var store={get:function(k,d){try{var v=localStorage.getItem(k);return v===null?d:JSON.parse(v);}catch(e){return d;}},
+             set:function(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}};
+
+  /* ---------- pairing code ---------- */
+  function newCode(){var a='abcdefghjkmnpqrstuvwxyz23456789',s='';for(var i=0;i<10;i++)s+=a[Math.floor(Math.random()*a.length)];return 'pfd-'+s;}
+  var code=store.get(K.code,null); if(!code){code=newCode();store.set(K.code,code);}
+  function topicAsk(){return code+'-ask';} function topicAns(){return code+'-ans';}
+  $('codeOut').textContent=code;
+
+  /* ---------- status ---------- */
+  var statusEl=$('status'),dot=$('dot');
+  function status(t,cls){statusEl.textContent=t;statusEl.className=cls||'';}
+  function setDot(cls){dot.className='pulse '+cls;}
+
+  /* ---------- views + focus model (Neural Band arrives as arrow keys / Enter / Escape) ---------- */
+  var cur='home',stack=[],focusIdx=0;
+  function focusables(){
+    var v=$('v-'+cur);
+    return Array.prototype.filter.call(v.querySelectorAll('.item,.reader'),function(el){return !el.hidden&&el.offsetParent!==null;});
+  }
+  function paint(){
+    var f=focusables();
+    if(focusIdx>=f.length)focusIdx=Math.max(0,f.length-1);
+    f.forEach(function(el,i){el.classList.toggle('focus',i===focusIdx);});
+    var el=f[focusIdx]; if(el&&el.tagName!=='INPUT'){try{el.focus({preventScroll:true});}catch(e){}}
+    if(el&&el.tagName==='INPUT'){try{el.focus({preventScroll:true});}catch(e){}}
+  }
+  function show(name,push){
+    if(push!==false&&name!==cur)stack.push(cur);
+    cur=name;
+    document.querySelectorAll('.view').forEach(function(v){v.classList.toggle('on',v.id==='v-'+name);});
+    $('viewName').textContent=$('v-'+name).getAttribute('data-title');
+    focusIdx=0;
+    if(name==='home')renderHome(); if(name==='history')renderHistory(); if(name==='read')layoutReader();
+    if(name==='ask'){focusIdx=1;}  /* land on the first quick question; move up to write */
+    paint();
+  }
+  function back(){ var p=stack.pop()||'home'; show(p,false); }
+  function activate(){
+    var el=focusables()[focusIdx]; if(!el)return;
+    if(el.classList.contains('reader')){nextPage();return;}
+    if(el.tagName==='INPUT'){ if(el.id==='qInput'&&el.value.trim())send(el.value.trim()); if(el.id==='codeInput'&&el.value.trim())setCode(el.value.trim()); return; }
+    el.click();
+  }
+  document.addEventListener('keydown',function(e){
+    var k=e.key;
+    if(k==='ArrowDown'||k==='ArrowRight'){ e.preventDefault(); if(cur==='read'&&focusables()[focusIdx]&&focusables()[focusIdx].classList.contains('reader')&&readPage<readPages-1){nextPage();return;} focusIdx=Math.min(focusables().length-1,focusIdx+1);paint(); }
+    else if(k==='ArrowUp'||k==='ArrowLeft'){ e.preventDefault(); if(cur==='read'&&readPage>0&&focusables()[focusIdx]&&focusables()[focusIdx].classList.contains('reader')){readPage--;layoutReader();return;} focusIdx=Math.max(0,focusIdx-1);paint(); }
+    else if(k==='Enter'){ e.preventDefault(); activate(); }
+    else if(k==='Escape'||(k==='Backspace'&&document.activeElement.tagName!=='INPUT')){ e.preventDefault(); back(); }
+  });
+  document.addEventListener('click',function(e){
+    var el=e.target.closest('.item,.reader'); if(!el)return;
+    var f=focusables(),i=f.indexOf(el); if(i>=0){focusIdx=i;paint();}
+    var go=el.getAttribute('data-go'); if(go){e.preventDefault();show(go);}
+  });
+  document.addEventListener('mousedown',function(e){ var el=e.target.closest('.item,.reader'); if(el&&el.tagName!=='INPUT')e.preventDefault(); });
+
+  /* ---------- quick questions (edit freely; they are sent as written) ---------- */
+  var quick=[
+    'What does the tire pressure warning light mean and is it safe to keep driving?',
+    'What is the recommended oil change interval for a modern turbocharged gas engine?',
+    'Explain the difference between a lease and a finance purchase in plain language.',
+    'What should I check when inspecting a used car before buying it?',
+    'Give me three short talking points on why regular maintenance saves money.'
+  ];
+  var askList=$('askList');
+  quick.forEach(function(q){
+    var b=document.createElement('button');b.className='item';b.type='button';
+    b.innerHTML='<span class="txt"></span><span class="k">send</span>';b.firstChild.textContent=q;
+    b.addEventListener('click',function(){send(q);});askList.appendChild(b);
+  });
+  var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(SR){
+    var mb=document.createElement('button');mb.className='item';mb.type='button';
+    mb.innerHTML='<span class="txt">Speak a question</span><span class="k">mic</span>';
+    mb.addEventListener('click',function(){
+      var r=new SR();r.lang=navigator.language||'en-US';r.interimResults=false;
+      status('Listening…','live');
+      r.onresult=function(ev){var t=ev.results[0][0].transcript;$('qInput').value=t;status('Heard: '+t,'live');send(t);};
+      r.onerror=function(ev){status('Mic: '+ev.error,'err');};
+      r.onend=function(){};
+      try{r.start();}catch(e){status('Mic unavailable','err');}
+    });
+    askList.insertBefore(mb,askList.firstChild);
+  }
+
+  /* ---------- relay ---------- */
+  var pending=store.get(K.pending,null), lastId=store.get(K.last,null), online=false;
+  function publish(topic,obj){
+    return fetch(RELAY+topic,{method:'POST',body:JSON.stringify(obj),headers:{'Content-Type':'text/plain'}});
+  }
+  function send(q){
+    var msg={t:'ask',id:Date.now().toString(36)+Math.random().toString(36).slice(2,6),q:q,ts:Date.now()};
+    pending=msg;store.set(K.pending,pending);
+    $('waitQ').textContent='“'+q+'”'; show('wait'); status('Sending…','live');
+    publish(topicAsk(),msg).then(function(r){ if(!r.ok)throw new Error(r.status); status('Sent. Waiting for the bridge…','live'); setDot('wait'); })
+      .catch(function(e){ status('Could not reach the relay ('+(e.message||e)+').','err'); setDot('off'); });
+  }
+  function poll(){
+    var since=lastId||'30m';
+    fetch(RELAY+topicAns()+'/json?poll=1&since='+encodeURIComponent(since))
+      .then(function(r){ if(!r.ok)throw new Error(r.status); return r.text(); })
+      .then(function(txt){
+        if(!online){online=true;setDot(pending?'wait':'on'); if(!pending)status('Paired · '+code); $('pairState').textContent='paired';}
+        txt.split('\n').forEach(function(line){
+          if(!line.trim())return; var m; try{m=JSON.parse(line);}catch(e){return;}
+          if(m.event!=='message')return; lastId=m.id;store.set(K.last,lastId);
+          var body; try{body=JSON.parse(m.message);}catch(e){body={t:'ans',q:'',a:m.message,ts:Date.now()};}
+          if(body.t==='ans')receive(body);
+          if(body.t==='hello'){status('Phone bridge connected','live');setDot('on');}
+        });
+      })
+      .catch(function(e){ online=false; setDot('off'); $('pairState').textContent='offline'; status('Relay offline: '+(e.message||e),'err'); });
+  }
+  function receive(ans){
+    var hist=store.get(K.hist,[]);
+    hist.unshift({q:ans.q||(pending&&pending.q)||'',a:ans.a||'',ts:ans.ts||Date.now()}); hist=hist.slice(0,10); store.set(K.hist,hist);
+    if(pending&&(!ans.id||ans.id===pending.id)){pending=null;store.set(K.pending,null);}
+    status('Answer received','live'); setDot('on');
+    stack=[]; cur='home';   /* back from the answer goes home, not to the waiting screen */
+    openAnswer(0);
+    if(speakOn&&window.speechSynthesis)speak(ans.a);
+  }
+  setInterval(poll,3000); poll();
+  /* tell the bridge we exist so it can show "glasses online" */
+  publish(topicAsk(),{t:'hello',from:'glasses',ts:Date.now()}).catch(function(){});
+
+  /* ---------- reader: page the answer so nothing scrolls off the 600px lens ---------- */
+  var readPage=0,readPages=1,readIdx=0,speakOn=false;
+  function openAnswer(i){
+    var h=store.get(K.hist,[]); if(!h[i])return; readIdx=i;readPage=0;
+    $('readQ').textContent=h[i].q; $('readA').textContent=h[i].a;
+    show('read');
+  }
+  function layoutReader(){
+    var box=$('reader'),a=$('readA');
+    var avail=box.clientHeight-$('readQ').offsetHeight-28-8;
+    var lineH=parseFloat(getComputedStyle(a).lineHeight)||26;
+    var linesPer=Math.max(1,Math.floor(avail/lineH)), pageH=linesPer*lineH;
+    readPages=Math.max(1,Math.ceil((a.scrollHeight-4)/pageH));
+    $('readAW').style.height=pageH+'px';
+    if(readPage>=readPages)readPage=readPages-1;
+    a.style.transform='translateY(-'+(readPage*pageH)+'px)';
+    box.style.setProperty('--pageH',pageH+'px');
+    $('pager').textContent=readPages>1?('page '+(readPage+1)+' of '+readPages+(readPage<readPages-1?' · ▼ next':' · ▲ back')):'';
+    $('readSpeak').hidden=!window.speechSynthesis;
+  }
+  function nextPage(){ if(readPage<readPages-1){readPage++;layoutReader();} }
+  function speak(t){ try{speechSynthesis.cancel();var u=new SpeechSynthesisUtterance(t);speechSynthesis.speak(u);}catch(e){} }
+  $('readSpeak').addEventListener('click',function(){ var h=store.get(K.hist,[]); if(h[readIdx])speak(h[readIdx].a); });
+
+  /* ---------- home + history ---------- */
+  function renderHome(){
+    var h=store.get(K.hist,[]);
+    $('homeRead').hidden=!h.length; $('homeHist').hidden=h.length<2;
+    $('homeRead').firstChild.textContent=h.length?('Read: '+h[0].q):'';
+    $('pairState').textContent=online?'paired':'offline';
+    if(pending){$('homeLine').textContent='Waiting for an answer…';$('homeSub').textContent='“'+pending.q+'”';}
+    else{$('homeLine').textContent='Ask ChatGPT, hands-free.';$('homeSub').textContent='Pick a question, or write one with the Neural Band.';}
+  }
+  $('homeRead').addEventListener('click',function(e){e.preventDefault();openAnswer(0);});
+  function renderHistory(){
+    var l=$('histList');l.innerHTML='';
+    store.get(K.hist,[]).forEach(function(h,i){
+      var b=document.createElement('button');b.className='item small';b.type='button';
+      b.innerHTML='<span class="txt"></span><span class="k"></span>';
+      b.firstChild.textContent=h.q||h.a.slice(0,60); b.lastChild.textContent=new Date(h.ts).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});
+      b.addEventListener('click',function(){openAnswer(i);}); l.appendChild(b);
+    });
+  }
+
+  /* ---------- pairing ---------- */
+  function setCode(c){ c=c.trim().toLowerCase(); if(!/^[a-z0-9-]{6,40}$/.test(c)){status('Code must be letters, digits and dashes','err');return;}
+    code=c;store.set(K.code,code);lastId=null;store.set(K.last,null);$('codeOut').textContent=code;$('codeInput').value='';online=false;status('Code set · '+code,'live');poll(); }
+  $('codeNew').addEventListener('click',function(){setCode(newCode());});
+  $('pairHint').textContent='Bridge page: open bridge/ from the same site and enter the code. Messages travel through '+RELAY.replace('https://','')+' and expire after 12 hours.';
+
+  /* ---------- deep link (?q=) lets the Meta AI app or a test URL ask directly ---------- */
+  try{var q=new URLSearchParams(location.search).get('q');if(q)send(q);}catch(e){}
+  renderHome(); paint(); status(pending?'Waiting for the bridge…':'Not paired yet');
+})();
+</script>
+</body>
+</html>

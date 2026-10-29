@@ -1,0 +1,18 @@
+{
+  "name": "Glasses Ask Bridge",
+  "short_name": "Bridge",
+  "description": "Phone side of Glasses Ask: receives questions from Meta Ray-Ban Display glasses, opens free chatgpt.com, sends the answer back.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#000814",
+  "theme_color": "#000814",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ],
+  "share_target": {
+    "action": "./index.html",
+    "method": "GET",
+    "params": { "title": "title", "text": "text", "url": "url" }
+  }
+}

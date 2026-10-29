@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#000814">
+<link rel="manifest" href="manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Glasses Ask">
+<title>Glasses Ask Bridge</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="Receives questions from Meta Ray-Ban Display glasses, opens free chatgpt.com with them, and sends the answer back to the lens.">
+<style>
+/* Layout: one-screen two-column console. Left = ask panel, right = quick questions + recent. Stacks on phones. */
+:root{
+  --bg:#000814; --surface:#001d3d; --surface-2:#02254d; --fg:#e5e5e5; --muted:rgba(229,229,229,.62);
+  --line:rgba(229,229,229,.14); --accent:#ffc300; --accent-ink:#000814; --hot:#ff5733; --focus:#ffc300;
+  --shadow:0 6px 18px rgba(0,0,0,.45); --shadow-lift:0 14px 30px rgba(0,0,0,.6);
+  --carbon-page:repeating-linear-gradient(45deg,rgba(0,196,207,.045) 0,rgba(0,196,207,.045) 1px,transparent 0,transparent 50%),repeating-linear-gradient(135deg,rgba(0,196,207,.045) 0,rgba(0,196,207,.045) 1px,transparent 0,transparent 50%);
+  --carbon-page-size:6px 6px;
+  --carbon-card:repeating-linear-gradient(45deg,rgba(255,255,255,.025) 0,rgba(255,255,255,.025) 1px,transparent 0,transparent 50%),repeating-linear-gradient(135deg,rgba(255,255,255,.025) 0,rgba(255,255,255,.025) 1px,transparent 0,transparent 50%);
+  --carbon-card-size:5px 5px;
+  --font:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif,"Apple Color Emoji","Segoe UI Emoji","Segoe UI Symbol";
+  color-scheme:dark;
+}
+@media (prefers-color-scheme: light){
+  :root:not([data-theme="dark"]){
+    --bg:#e5e5e5; --surface:#ffffff; --surface-2:#f4f5f7; --fg:#000814; --muted:rgba(0,8,20,.6);
+    --line:rgba(0,29,61,.16); --accent:#ffc300; --accent-ink:#000814; --hot:#ff5733; --focus:#001d3d;
+    --shadow:0 6px 18px rgba(0,29,61,.12); --shadow-lift:0 14px 30px rgba(0,29,61,.2);
+    --carbon-page:none; --carbon-card:none; color-scheme:light;
+  }
+}
+:root[data-theme="light"]{
+  --bg:#e5e5e5; --surface:#ffffff; --surface-2:#f4f5f7; --fg:#000814; --muted:rgba(0,8,20,.6);
+  --line:rgba(0,29,61,.16); --accent:#ffc300; --accent-ink:#000814; --hot:#ff5733; --focus:#001d3d;
+  --shadow:0 6px 18px rgba(0,29,61,.12); --shadow-lift:0 14px 30px rgba(0,29,61,.2);
+  --carbon-page:none; --carbon-card:none; color-scheme:light;
+}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--font);font-size:15px;line-height:1.45;
+  background-image:var(--carbon-page);background-size:var(--carbon-page-size)}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+.wrap{min-height:100%;display:flex;flex-direction:column;gap:14px;
+  padding-block:14px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));max-width:1180px;margin:0 auto}
+header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.brand{display:flex;flex-direction:column;gap:2px}
+.brand h1{margin:0;font-size:20px;font-weight:700;letter-spacing:.2px;text-wrap:balance}
+.brand p{margin:0;color:var(--muted);font-size:12.5px;text-transform:uppercase;letter-spacing:.08em}
+.hdr-actions{display:flex;gap:8px;align-items:center}
+.btn{appearance:none;border:1px solid var(--line);background:var(--surface);color:var(--fg);font:inherit;font-weight:600;
+  padding:10px 14px;border-radius:12px;cursor:pointer;display:inline-flex;align-items:center;gap:8px;text-decoration:none;
+  transition:transform .15s ease,box-shadow .15s ease,background .15s ease;box-shadow:var(--shadow);min-height:42px}
+.btn:hover{transform:translateY(-2px);box-shadow:var(--shadow-lift)}
+.btn:focus-visible,textarea:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:transparent;font-size:16px}
+.btn.primary[aria-disabled="true"]{opacity:.45;pointer-events:none}
+.btn.hot{background:var(--hot);color:#fff;border-color:transparent}
+.btn.sm{padding:7px 10px;min-height:34px;font-size:13px;border-radius:10px}
+.btn.icon{width:42px;padding:0;justify-content:center}
+.grid{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:14px;flex:1;min-height:0}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px;box-shadow:var(--shadow);
+  background-image:var(--carbon-card);background-size:var(--carbon-card-size);display:flex;flex-direction:column;gap:12px;min-width:0}
+.card h2{margin:0;font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:700}
+textarea{width:100%;min-height:150px;resize:vertical;background:var(--surface-2);color:var(--fg);border:1px solid var(--line);
+  border-radius:12px;padding:14px;font:inherit;font-size:18px;line-height:1.4}
+textarea::placeholder{color:var(--muted)}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.row.between{justify-content:space-between}
+.opts{display:flex;gap:10px;flex-wrap:wrap;align-items:center;font-size:13.5px;color:var(--muted)}
+.opts label{display:inline-flex;align-items:center;gap:6px}
+select{background:var(--surface-2);color:var(--fg);border:1px solid var(--line);border-radius:10px;padding:7px 10px;font:inherit;font-size:13.5px}
+input[type="checkbox"]{accent-color:var(--accent);width:16px;height:16px}
+.status{font-size:13px;color:var(--muted);min-height:1.3em}
+.status.live{color:var(--hot);font-weight:600}
+.mic{position:relative}
+.mic.listening{background:var(--hot);color:#fff;border-color:transparent;animation:pulse 1.2s ease-in-out infinite}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(255,87,51,.5)}50%{box-shadow:0 0 0 10px rgba(255,87,51,0)}}
+.chips{display:flex;flex-direction:column;gap:8px}
+.chip{appearance:none;text-align:left;font:inherit;font-size:14px;background:var(--surface-2);color:var(--fg);border:1px solid var(--line);
+  border-radius:10px;padding:10px 12px;cursor:pointer;transition:transform .15s ease,box-shadow .15s ease;display:flex;justify-content:space-between;gap:8px}
+.chip:hover{transform:translateY(-2px);box-shadow:var(--shadow-lift)}
+.chip span.k{color:var(--muted);font-size:12px;white-space:nowrap}
+.hist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;max-height:220px;overflow:auto}
+.hist li{display:flex;gap:8px;align-items:center}
+.hist button.q{flex:1;min-width:0;appearance:none;text-align:left;font:inherit;font-size:13.5px;background:transparent;color:var(--fg);
+  border:1px solid transparent;border-radius:10px;padding:7px 10px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hist button.q:hover{border-color:var(--line);background:var(--surface-2)}
+.hist time{color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.empty{color:var(--muted);font-size:13.5px;margin:0}
+details{border-top:1px solid var(--line);padding-top:10px}
+summary{cursor:pointer;font-weight:600;font-size:13.5px}
+details ol{margin:8px 0 0;padding-left:20px;color:var(--muted);font-size:13.5px;display:flex;flex-direction:column;gap:4px}
+details code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12.5px;background:var(--surface-2);padding:1px 5px;border-radius:6px;word-break:break-all}
+footer{color:var(--muted);font-size:12px;text-align:center}
+.toast{position:fixed;left:50%;bottom:calc(18px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--accent);color:var(--accent-ink);
+  padding:10px 16px;border-radius:12px;font-weight:600;box-shadow:var(--shadow-lift);opacity:0;pointer-events:none;transition:opacity .2s}
+.toast.show{opacity:1}
+@media (max-width:760px){.grid{grid-template-columns:1fr}.hist{max-height:160px}textarea{min-height:120px}}
+@media (prefers-reduced-motion:reduce){.btn,.chip{transition:none}.mic.listening{animation:none}}
+</style>
+<style>
+.pair{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.pair input{flex:1;min-width:160px;background:var(--surface-2);color:var(--fg);border:1px solid var(--line);border-radius:10px;padding:9px 12px;font:inherit;font-size:15px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;letter-spacing:.04em}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--hot);margin-right:6px;vertical-align:middle}
+.dot.on{background:#2fbf71}.dot.wait{background:var(--accent)}
+.inbox{display:flex;flex-direction:column;gap:10px;overflow:auto;max-height:46vh}
+.qcard{background:var(--surface-2);border:1px solid var(--line);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px}
+.qcard .qt{font-size:16px;font-weight:600;margin:0}
+.qcard .meta{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.qcard textarea{min-height:90px;font-size:15px}
+.qcard.done{opacity:.6}
+.qcard.done textarea,.qcard.done .acts{display:none}
+.acts{display:flex;gap:8px;flex-wrap:wrap}
+.kbd{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12.5px;background:var(--surface-2);padding:1px 5px;border-radius:6px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <h1>Glasses Ask Bridge</h1>
+      <p>Price Family Dealerships · Phone side for Meta Ray-Ban Display</p>
+    </div>
+    <div class="hdr-actions">
+      <button class="btn sm" id="themeBtn" type="button" aria-label="Switch to light mode">☀ Light</button>
+    </div>
+  </header>
+
+  <div class="grid">
+    <section class="card" aria-labelledby="inboxH">
+      <h2 id="inboxH">Questions from the glasses</h2>
+      <div class="pair">
+        <span><span class="dot" id="dot"></span><span id="relayState">Not paired</span></span>
+        <input id="code" type="text" placeholder="Pair code from the glasses, e.g. pfd-abc123xyz9" autocomplete="off" aria-label="Pair code">
+        <button class="btn sm" id="pairBtn" type="button">Pair</button>
+      </div>
+      <div class="status" id="status" aria-live="polite"></div>
+      <div class="inbox" id="inbox"></div>
+      <p class="empty" id="inboxEmpty">When you ask on the glasses, the question appears here. Tap <strong>Open in ChatGPT</strong>, copy the reply, paste it below the question, and tap <strong>Send to glasses</strong>.</p>
+      <details>
+        <summary>Make it automatic (optional)</summary>
+        <ol>
+          <li>Install a userscript manager such as Tampermonkey in the browser where you use chatgpt.com.</li>
+          <li>Add <span class="kbd">chatgpt-bridge.user.js</span> from this folder and set the same pair code at the top of the script.</li>
+          <li>Keep a chatgpt.com tab open. Questions from the glasses are typed in, sent, and the reply is relayed back without you touching the phone.</li>
+          <li>This automates the ChatGPT web page in your own browser. Check OpenAI's Terms of Use before relying on it. The manual flow above needs nothing extra.</li>
+        </ol>
+      </details>
+    </section>
+
+    <aside class="card" aria-labelledby="askH">
+      <h2 id="askH">Ask from here</h2>
+      <textarea id="q" placeholder="Type or dictate a question. It opens in ChatGPT, and you can send the reply to the glasses." aria-label="Your question"></textarea>
+      <div class="row between">
+        <div class="row">
+          <button class="btn mic" id="micBtn" type="button">🎙 Speak</button>
+          <button class="btn sm" id="clearBtn" type="button">Clear</button>
+        </div>
+        <div class="opts">
+          <label for="mode">Mode
+            <select id="mode">
+              <option value="">Chat</option>
+              <option value="search">Web search</option>
+              <option value="research">Deep research</option>
+            </select>
+          </label>
+          <label><input type="checkbox" id="temp" checked> Temporary chat</label>
+        </div>
+      </div>
+      <div class="status" id="micStatus" aria-live="polite"></div>
+      <div class="row">
+        <a class="btn primary" id="openBtn" href="https://chatgpt.com/" target="_blank" rel="noopener" aria-disabled="true">Open in ChatGPT →</a>
+        <button class="btn sm" id="toGlasses" type="button">Show question on glasses</button>
+      </div>
+      <h2 style="margin-top:4px">Answer to send</h2>
+      <textarea id="a" placeholder="Paste ChatGPT's reply here, then send it to the lens." aria-label="Answer to send" style="min-height:110px;font-size:15px"></textarea>
+      <div class="row">
+        <button class="btn hot" id="sendBtn" type="button">Send to glasses</button>
+        <span class="status" id="sendStatus"></span>
+      </div>
+    </aside>
+  </div>
+
+  <footer>Questions and answers travel through ntfy.sh, a free public relay, under your pair code. Anyone who knows the code could read them, so keep it private and avoid personal data.</footer>
+</div>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+(function(){
+  'use strict';
+  var $=function(id){return document.getElementById(id);};
+  var RELAY='https://ntfy.sh/';
+  var K={code:'gab.code',last:'gab.lastId',inbox:'gab.inbox',theme:'glasses-ask.theme',prefs:'glasses-ask.prefs'};
+  var store={get:function(k,d){try{var v=localStorage.getItem(k);return v===null?d:JSON.parse(v);}catch(e){return d;}},
+             set:function(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}};
+
+  /* ---------- theme (dark default, carbon texture in dark via tokens) ---------- */
+  var root=document.documentElement,themeBtn=$('themeBtn');
+  function applyTheme(t){root.setAttribute('data-theme',t);root.classList.toggle('carbon',t==='dark');
+    themeBtn.textContent=t==='dark'?'☀ Light':'☾ Dark';themeBtn.setAttribute('aria-label',t==='dark'?'Switch to light mode':'Switch to dark mode');}
+  applyTheme(store.get(K.theme,null)||'dark');
+  themeBtn.addEventListener('click',function(){var n=root.getAttribute('data-theme')==='dark'?'light':'dark';applyTheme(n);store.set(K.theme,n);});
+
+  var toastEl=$('toast'),toastT;
+  function toast(m){toastEl.textContent=m;toastEl.classList.add('show');clearTimeout(toastT);toastT=setTimeout(function(){toastEl.classList.remove('show');},1800);}
+  function status(t,live){$('status').textContent=t;$('status').className='status'+(live?' live':'');}
+
+  /* ---------- ChatGPT link ---------- */
+  var q=$('q'),mode=$('mode'),temp=$('temp'),openBtn=$('openBtn');
+  function chatUrl(text){var u='https://chatgpt.com/?q='+encodeURIComponent(text.trim());if(mode.value)u+='&hints='+mode.value;if(temp.checked)u+='&temporary-chat=true';return u;}
+  function refresh(){var t=q.value.trim();openBtn.href=t?chatUrl(t):'https://chatgpt.com/';openBtn.setAttribute('aria-disabled',t?'false':'true');store.set(K.prefs,{mode:mode.value,temp:temp.checked});}
+  q.addEventListener('input',refresh);mode.addEventListener('change',refresh);temp.addEventListener('change',refresh);
+  (function(){var p=store.get(K.prefs,{});if(p.mode!==undefined)mode.value=p.mode;if(p.temp!==undefined)temp.checked=!!p.temp;})();
+  $('clearBtn').addEventListener('click',function(){q.value='';refresh();q.focus();});
+
+  /* ---------- relay ---------- */
+  var code=store.get(K.code,''),lastId=store.get(K.last,null),online=false,inbox=store.get(K.inbox,[]);
+  $('code').value=code;
+  function topicAsk(){return code+'-ask';} function topicAns(){return code+'-ans';}
+  function publish(topic,obj){return fetch(RELAY+topic,{method:'POST',body:JSON.stringify(obj),headers:{'Content-Type':'text/plain'}});}
+  function setState(cls,txt){$('dot').className='dot '+cls;$('relayState').textContent=txt;}
+  $('pairBtn').addEventListener('click',function(){
+    var c=$('code').value.trim().toLowerCase();
+    if(!/^[a-z0-9-]{6,40}$/.test(c)){status('Enter the code shown on the glasses under Pair with phone.');return;}
+    code=c;store.set(K.code,code);lastId=null;store.set(K.last,null);online=false;
+    publish(topicAns(),{t:'hello',from:'bridge',ts:Date.now()}).then(function(){toast('Paired');}).catch(function(){});
+    poll();
+  });
+  function poll(){
+    if(!code){setState('','Not paired');return;}
+    fetch(RELAY+topicAsk()+'/json?poll=1&since='+encodeURIComponent(lastId||'30m'))
+      .then(function(r){if(!r.ok)throw new Error(r.status);return r.text();})
+      .then(function(txt){
+        if(!online){online=true;setState('on','Paired · '+code);}
+        txt.split('\n').forEach(function(line){
+          if(!line.trim())return;var m;try{m=JSON.parse(line);}catch(e){return;}
+          if(m.event!=='message')return;lastId=m.id;store.set(K.last,lastId);
+          var b;try{b=JSON.parse(m.message);}catch(e){b={t:'ask',id:m.id,q:m.message,ts:m.time*1000};}
+          if(b.t==='ask')addQuestion(b);
+          if(b.t==='hello')status('Glasses online',true);
+        });
+      })
+      .catch(function(e){online=false;setState('','Relay offline ('+(e.message||e)+')');});
+  }
+  setInterval(poll,3000);poll();
+
+  function addQuestion(b){
+    if(inbox.some(function(x){return x.id===b.id;}))return;
+    inbox.unshift({id:b.id,q:b.q,ts:b.ts||Date.now(),done:false});inbox=inbox.slice(0,20);store.set(K.inbox,inbox);
+    renderInbox();status('New question from the glasses',true);
+    try{if(navigator.vibrate)navigator.vibrate(120);}catch(e){}
+    if(!q.value.trim()){q.value=b.q;refresh();}
+  }
+  function sendAnswer(id,question,answer,cb){
+    if(!code){status('Pair with the glasses first.');return;}
+    publish(topicAns(),{t:'ans',id:id||null,q:question,a:answer,ts:Date.now()})
+      .then(function(r){if(!r.ok)throw new Error(r.status);cb&&cb(true);toast('Sent to glasses');})
+      .catch(function(e){cb&&cb(false);status('Send failed ('+(e.message||e)+')');});
+  }
+  function renderInbox(){
+    var box=$('inbox');box.innerHTML='';$('inboxEmpty').hidden=inbox.length>0;
+    inbox.forEach(function(it){
+      var c=document.createElement('div');c.className='qcard'+(it.done?' done':'');
+      c.innerHTML='<p class="qt"></p><div class="meta"></div><div class="acts"><a class="btn sm primary" target="_blank" rel="noopener">Open in ChatGPT →</a><button class="btn sm" type="button">Copy question</button></div><textarea placeholder="Paste ChatGPT’s reply here"></textarea><div class="acts"><button class="btn sm hot" type="button">Send to glasses</button><button class="btn sm" type="button">Dismiss</button></div>';
+      c.querySelector('.qt').textContent=it.q;
+      c.querySelector('.meta').textContent=new Date(it.ts).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})+(it.done?' · answered':'');
+      var acts=c.querySelectorAll('.acts');
+      acts[0].querySelector('a').href=chatUrl(it.q);
+      acts[0].querySelector('button').addEventListener('click',function(){navigator.clipboard&&navigator.clipboard.writeText(it.q).then(function(){toast('Copied');},function(){toast('Copy blocked');});});
+      var ta=c.querySelector('textarea');
+      acts[1].children[0].addEventListener('click',function(){var a=ta.value.trim();if(!a){toast('Paste the reply first');return;}sendAnswer(it.id,it.q,a,function(ok){if(ok){it.done=true;store.set(K.inbox,inbox);renderInbox();}});});
+      acts[1].children[1].addEventListener('click',function(){inbox=inbox.filter(function(x){return x.id!==it.id;});store.set(K.inbox,inbox);renderInbox();});
+      box.appendChild(c);
+    });
+  }
+  renderInbox();
+
+  /* ---------- ask from here ---------- */
+  openBtn.addEventListener('click',function(e){if(!q.value.trim()){e.preventDefault();$('micStatus').textContent='Type or speak a question first.';}});
+  $('toGlasses').addEventListener('click',function(){
+    var t=q.value.trim();if(!t){toast('Nothing to show');return;}
+    sendAnswer(null,t,'(Question noted on the phone. The answer will follow.)');
+  });
+  $('sendBtn').addEventListener('click',function(){
+    var a=$('a').value.trim();if(!a){toast('Paste the reply first');return;}
+    sendAnswer(null,q.value.trim(),a,function(ok){if(ok){$('sendStatus').textContent='Sent '+new Date().toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});$('a').value='';}});
+  });
+
+  /* ---------- share target / deep link ---------- */
+  try{var sp=new URLSearchParams(location.search);var inc=sp.get('q')||sp.get('text')||sp.get('title');if(inc){q.value=inc;refresh();}}catch(e){}
+
+  /* ---------- voice ---------- */
+  var SR=window.SpeechRecognition||window.webkitSpeechRecognition,micBtn=$('micBtn'),ms=$('micStatus'),rec=null,listening=false;
+  if(!SR){micBtn.disabled=true;micBtn.textContent='🎙 Voice unavailable';ms.textContent='Voice dictation needs Chrome on Android or Safari on iPhone.';}
+  else micBtn.addEventListener('click',function(){
+    if(listening){try{rec.stop();}catch(e){}return;}
+    rec=new SR();rec.lang=navigator.language||'en-US';rec.interimResults=true;var base=q.value.trim(),fin='';
+    rec.onstart=function(){listening=true;micBtn.classList.add('listening');micBtn.textContent='■ Stop';ms.className='status live';ms.textContent='Listening…';};
+    rec.onresult=function(ev){var interim='';for(var i=ev.resultIndex;i<ev.results.length;i++){var r=ev.results[i];if(r.isFinal)fin+=r[0].transcript;else interim+=r[0].transcript;}q.value=(base?base+' ':'')+(fin+interim).trim();refresh();};
+    rec.onerror=function(ev){ms.className='status';ms.textContent={'not-allowed':'Microphone blocked. Allow the mic for this page.','no-speech':'No speech heard.','audio-capture':'No microphone found.','network':'Speech service needs a connection.'}[ev.error]||('Voice error: '+ev.error);};
+    rec.onend=function(){listening=false;micBtn.classList.remove('listening');micBtn.textContent='🎙 Speak';if(ms.classList.contains('live')){ms.className='status';ms.textContent=q.value.trim()?'Got it.':'';}};
+    try{rec.start();}catch(e){ms.textContent='Could not start the microphone.';}
+  });
+  refresh();
+})();
+if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(function(){});}
+</script>
+</body>
+</html>
